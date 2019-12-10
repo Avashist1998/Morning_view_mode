@@ -5,22 +5,18 @@ import numpy as np
 from matplotlib import interactive
 import scipy
 def rgb_min_image(image):
-    [row,col,dem] = image.shape
-    rgb_image = np.zeros((row,col),dtype=int)
-    if (dem == 1):
-        rgb_image = image
-    else:
-        rgb_image = np.amin(image, axis= 2)
+    rgb_image = np.amin(image, axis= 2)
     return rgb_image
 
 def dark_channel(image):
-    temp_image = image.copy()
-    [row,col] = temp_image.shape
-    i_image = temp_image[:,:]
-    temp_image = cv2.copyMakeBorder(temp_image, 14, 14, 14, 14, cv2.BORDER_REFLECT) 
-    for i in range(row):
-        for j in range(col):
-            i_image[i,j] = (temp_image[i:14+i,j:14+j]).min()
+    for k in range (3):
+        i_image = image.copy()
+        temp_image = image[:,:,k].copy()
+        [row,col] = temp_image.shape
+        temp_image = cv2.copyMakeBorder(temp_image, 14, 14, 14, 14, cv2.BORDER_REFLECT) 
+        for i in range(row):
+            for j in range(col):
+                i_image[i,j,k] = (temp_image[i:14+i,j:14+j]).min()
     return i_image
 
 def transmition_map(image,A,w):
@@ -57,6 +53,7 @@ def A_estimator(image,dark_prior):
     A = image_copy
     A[:,:,:] = max_val[:]
     return A
+
 def Radience_cal(image,A,transmit_map,t_not):
     image_copy = image.copy()
     A_copy = A.copy()
@@ -68,25 +65,30 @@ def Radience_cal(image,A,transmit_map,t_not):
         radience[:,:,i] = np.divide(((image_copy[:,:,i]).astype(float) - A[0,0,i])/255,divisor) + A[0,0,i]/255
     radience = (((radience/np.max(radience)))*255).astype('uint8')
     return radience
-
+def L_calculator(image,):
+    print('test')
+def soft_matting(image,lamda,t_map):
+    
+    print(image)
 
 # inputing the information
 base_path  =  os.getcwd()
 test_Haze = os.listdir(base_path+ '/data_set/Training_Set/hazy')
 test_GT = os.listdir(base_path+ '/data_set/Training_Set/GT')
-image = cv2.imread( base_path + "/data_set/Test_Set/Paris.jpg",cv2.IMREAD_COLOR)
-# extracting the minmum value from the 3 channels
-rgb_image = rgb_min_image(image)
+image = cv2.imread( base_path + "/data_set/Test_Set/Iran.jpg",cv2.IMREAD_COLOR)
+# extracting the minmum value from 15 by 15 patch
+min_image = dark_channel(image)
+
 # perfroming the minmin with 15by15 min filter
-dark_prior = dark_channel(rgb_image)
+dark_prior = rgb_min_image(min_image)
 # displaying the results
 plt.fig, (ax1,ax2,ax3) = plt.subplots(1,3)
 ax1.imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
 ax1.set_title('original image')
-ax2.imshow(rgb_image,cmap='gray')
-ax2.set_title('The min rgb image',)
+ax2.imshow(cv2.cvtColor(min_image,cv2.COLOR_BGR2RGB))
+ax2.set_title('The min 15 patch image',)
 ax3.imshow(dark_prior,cmap='gray')
-ax3.set_title('The minfilter image')
+ax3.set_title('The dark prior')
 interactive(True)
 plt.show()
 
@@ -109,6 +111,6 @@ ax1.set_title('original image')
 ax2.imshow(Transmit_image,cmap='gray')
 ax2.set_title('The transmitance image')
 ax3.imshow(cv2.cvtColor(radience_image,cv2.COLOR_BGR2RGB))
-ax1.set_title('radiance image')
+ax3.set_title('radiance image')
 interactive(False)
 plt.show()
