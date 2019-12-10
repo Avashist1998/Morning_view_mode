@@ -3,7 +3,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np 
 from matplotlib import interactive
-
+import scipy
 def rgb_min_image(image):
     [row,col,dem] = image.shape
     rgb_image = np.zeros((row,col),dtype=int)
@@ -52,60 +52,63 @@ def A_estimator(image,dark_prior):
     max_val = image_copy[ind[0],ind[1],:]
     for element in j:
         ind = np.unravel_index(element, dark_copy.shape)
-        if (max_val[:] > image_copy[ind[0],ind[1],:]).all:
+        if (sum(max_val[:])/3 > sum(image_copy[ind[0],ind[1],:])/3):
             max_val[:] = image_copy[ind[0],ind[1],:]
     A = image_copy
-    A[:,:,0] = max_val[0]
-    A[:,:,1] = max_val[1]
-    A[:,:,2] = max_val[2]
+    A[:,:,:] = max_val[:]
     return A
 def Radience_cal(image,A,transmit_map,t_not):
     image_copy = image.copy()
     A_copy = A.copy()
-    transmit_map_copy = transmit_map.copy()
-    transmit_map_copy = image.copy()
+    transmit_map_copy = (transmit_map.copy()).astype(float)
     transmit_map_copy = transmit_map_copy/255
-    divisor = np.maximum(transmit_map,t_not)
+    divisor = np.maximum(transmit_map_copy,t_not)
+    radience = (image.copy()).astype(float)
     for i in range(3):
-        radience[:,:,i] = np.divide(((image_copy[:,:,i] - A_copy[:,:,i])/255),divisor)*255 + A_copy[:,:,i]
-    radience = (radience/np.max(radience)).astype(int)
+        radience[:,:,i] = np.divide(((image_copy[:,:,i]).astype(float) - A[0,0,i])/255,divisor) + A[0,0,i]/255
+    radience = (((radience/np.max(radience)))*255).astype('uint8')
     return radience
+
+
 # inputing the information
 base_path  =  os.getcwd()
 test_Haze = os.listdir(base_path+ '/data_set/Training_Set/hazy')
 test_GT = os.listdir(base_path+ '/data_set/Training_Set/GT')
-image = cv2.imread( base_path + "/data_set/Test_Set/Bridge.jpg",cv2.IMREAD_COLOR)
+image = cv2.imread( base_path + "/data_set/Test_Set/Paris.jpg",cv2.IMREAD_COLOR)
 # extracting the minmum value from the 3 channels
 rgb_image = rgb_min_image(image)
 # perfroming the minmin with 15by15 min filter
 dark_prior = dark_channel(rgb_image)
 # displaying the results
 plt.fig, (ax1,ax2,ax3) = plt.subplots(1,3)
-ax1.imshow(image)
+ax1.imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
 ax1.set_title('original image')
-ax2.imshow(rgb_image)
-ax2.set_title('The min rgb image')
-ax3.imshow(dark_prior)
+ax2.imshow(rgb_image,cmap='gray')
+ax2.set_title('The min rgb image',)
+ax3.imshow(dark_prior,cmap='gray')
 ax3.set_title('The minfilter image')
 interactive(True)
 plt.show()
 
 A = A_estimator(image,dark_prior)
 plt.fig, (ax1,ax2,ax3) = plt.subplots(1,3)
-ax1.imshow(image)
+ax1.imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
 ax1.set_title('original image')
-ax2.imshow(A)
+ax2.imshow(A,cmap='gray')
 ax2.set_title('The Ambiance image')
 Transmit_image = transmition_map(image,A,0.95)
-ax3.imshow(Transmit_image)
+ax3.imshow(Transmit_image,cmap='gray')
 ax3.set_title('The transmitance image')
 
 plt.show()
 
 plt.fig, (ax1,ax2,ax3) = plt.subplots(1,3)
 radience_image = Radience_cal(image,A,Transmit_image,0.1)
-ax1.imshow(radience_image)
+ax1.imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
+ax1.set_title('original image')
+ax2.imshow(Transmit_image,cmap='gray')
+ax2.set_title('The transmitance image')
+ax3.imshow(cv2.cvtColor(radience_image,cv2.COLOR_BGR2RGB))
 ax1.set_title('radiance image')
-
 interactive(False)
 plt.show()
