@@ -5,88 +5,91 @@ import numpy as np
 from matplotlib import interactive
 import scipy
 def rgb_min_image(image):
-    [row,col,dem] = image.shape
-    rgb_image = np.zeros((row,col),dtype=int)
-    if (dem == 1):
-        rgb_image = image
-    else:
-        rgb_image = np.amin(image, axis= 2)
+    rgb_image = np.amin(image, axis= 2)
     return rgb_image
 
-def dark_channel(image):
-    temp_image = image.copy()
-    [row,col] = temp_image.shape
-    i_image = temp_image[:,:]
-    temp_image = cv2.copyMakeBorder(temp_image, 14, 14, 14, 14, cv2.BORDER_REFLECT) 
-    for i in range(row):
-        for j in range(col):
-            i_image[i,j] = (temp_image[i:14+i,j:14+j]).min()
+def min_filter(image):
+    for k in range (3):
+        i_image = image.copy()
+        temp_image = image[:,:,k].copy()
+        [row,col] = temp_image.shape
+        temp_image = cv2.copyMakeBorder(temp_image, 14, 14, 14, 14, cv2.BORDER_REFLECT) 
+        for i in range(row):
+            for j in range(col):
+                i_image[i,j,k] = (temp_image[i:14+i,j:14+j]).min()
     return i_image
-
+def dark_channel(image):
+    new_image = image.copy()
+    min_image = min_filter(new_image)
+    dark_prior = rgb_min_image(min_image)
+    return dark_prior
 def transmition_map(image,A,w):
-    image_copy = ((image/255).astype(float)).copy()
-    A_copy = ((A/255).astype(float)).copy()
-    [row,col,dem] = image_copy.shape
-    image_copy = np.divide(image_copy,A_copy)
-    image_r = cv2.copyMakeBorder(image_copy[:,:,0], 14, 14, 14, 14, cv2.BORDER_REFLECT)
-    image_g = cv2.copyMakeBorder(image_copy[:,:,1], 14, 14, 14, 14, cv2.BORDER_REFLECT)
-    image_b = cv2.copyMakeBorder(image_copy[:,:,2], 14, 14, 14, 14, cv2.BORDER_REFLECT)
-    i_image = image_copy
-    for i in range(row):
-        for j in range(col):
-            i_image[i,j,0] = (image_r[i:14+i,j:14+j]).min()
-            i_image[i,j,1] = (image_g[i:14+i,j:14+j]).min()
-            i_image[i,j,2] = (image_b[i:14+i,j:14+j]).min()
-    i_image = np.amin(i_image, axis= 2)
-    transmition = 1 - w*(i_image)
-    transmition = (transmition*255).astype(int)
+    image_new =  np.divide(image,A).astype(float)
+    new_dark = dark_channel(image_new)
+    transmition = 1 - w*new_dark
     return transmition
 
 def A_estimator(image,dark_prior):
     image_copy = image.copy()
     [row,col,dem] = image_copy.shape
     dark_copy = dark_prior.copy()
-    num = np.round(row*col*0.01).astype(int)
+    num = np.round(row*col*0.001).astype(int)
     j = sorted(np.asarray(dark_copy).reshape(-1), reverse=True)[:num]
     ind = np.unravel_index(j[0], dark_copy.shape)
     max_val = image_copy[ind[0],ind[1],:]
     for element in j:
         ind = np.unravel_index(element, dark_copy.shape)
-        if (sum(max_val[:])/3 > sum(image_copy[ind[0],ind[1],:])/3):
+        if (sum(max_val[:]) < sum(image_copy[ind[0],ind[1],:])):
             max_val[:] = image_copy[ind[0],ind[1],:]
     A = image_copy
     A[:,:,:] = max_val[:]
     return A
+
 def Radience_cal(image,A,transmit_map,t_not):
     image_copy = image.copy()
     A_copy = A.copy()
     transmit_map_copy = (transmit_map.copy()).astype(float)
-    transmit_map_copy = transmit_map_copy/255
     divisor = np.maximum(transmit_map_copy,t_not)
     radience = (image.copy()).astype(float)
     for i in range(3):
         radience[:,:,i] = np.divide(((image_copy[:,:,i]).astype(float) - A[0,0,i])/255,divisor) + A[0,0,i]/255
     radience = (((radience/np.max(radience)))*255).astype('uint8')
     return radience
-
+def L_calculator(image):
+    lamda = 10**(-4)
+    epsalon = 10**(-8)
+    L = image[:,:,1].copy()
+    [row, col, dem] = image.shape
+    abs_wk = 9
+    #padding wiht the image 
+    L = cv2.copyMakeBorder(L[:,:], 1, 1, 1, 1, cv2.BORDER_REFLECT)
+    for i in range(1,row-1):
+        for j in range(1,col-1):
+            L[i,j] = 1
+    print('test')
+def soft_matting(image,t_map):
+    
+    
+    print(image)
 
 # inputing the information
 base_path  =  os.getcwd()
 test_Haze = os.listdir(base_path+ '/data_set/Training_Set/hazy')
 test_GT = os.listdir(base_path+ '/data_set/Training_Set/GT')
-image = cv2.imread( base_path + "/data_set/Test_Set/Paris.jpg",cv2.IMREAD_COLOR)
-# extracting the minmum value from the 3 channels
-rgb_image = rgb_min_image(image)
+image = cv2.imread( base_path + "/data_set/Test_Set/Golden_gate.jpg",cv2.IMREAD_COLOR)
+# extracting the minmum value from 15 by 15 patch
+min_image = min_filter(image)
+
 # perfroming the minmin with 15by15 min filter
-dark_prior = dark_channel(rgb_image)
+dark_prior = rgb_min_image(min_image)
 # displaying the results
 plt.fig, (ax1,ax2,ax3) = plt.subplots(1,3)
 ax1.imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
 ax1.set_title('original image')
-ax2.imshow(rgb_image,cmap='gray')
-ax2.set_title('The min rgb image',)
+ax2.imshow(cv2.cvtColor(min_image,cv2.COLOR_BGR2RGB))
+ax2.set_title('The min 15 patch image',)
 ax3.imshow(dark_prior,cmap='gray')
-ax3.set_title('The minfilter image')
+ax3.set_title('The dark prior')
 interactive(True)
 plt.show()
 
@@ -109,6 +112,6 @@ ax1.set_title('original image')
 ax2.imshow(Transmit_image,cmap='gray')
 ax2.set_title('The transmitance image')
 ax3.imshow(cv2.cvtColor(radience_image,cv2.COLOR_BGR2RGB))
-ax1.set_title('radiance image')
+ax3.set_title('Haze Free image')
 interactive(False)
 plt.show()
