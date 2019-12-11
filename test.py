@@ -55,37 +55,66 @@ def A_estimator(image,dark_prior):
     A[:,:,:] = max_val[:]
     return A
 
-def Radience_cal(image,A,transmit_map,t_not):
+def Radience_cal(image,A,Transmission_map,t_not):
     #Used information from the transmit map to remove haze from the image. 
     image_copy = image.copy()
     A_copy = A.copy()
-    transmit_map_copy = (transmit_map.copy()).astype(float)
-    divisor = np.maximum(transmit_map_copy,t_not)
+    Transmission_map_copy = (Transmission_map.copy()).astype(float)
+    divisor = np.maximum(Transmission_map_copy,t_not)
     radience = (image.copy()).astype(float)
     for i in range(3):
-        radience[:,:,i] = np.divide(((image_copy[:,:,i]).astype(float) - A[0,0,i])/255,divisor) + A[0,0,i]/255
-    radience = (((radience/np.max(radience)))*255).astype('uint8')
-    return radience
+        radience[:,:,i] = np.divide(((image_copy[:,:,i]).astype(float) - A[0,0,i]),divisor) + A[0,0,i]
+    #radience = 255*(radience/np.max(radience))
+    radience[radience>255]=255
+    radience[radience<0]=0
+    return radience.astype('uint8')
 
-def L_calculator(image):
+def L_calculator(image,Transmission_map):
     #helps fine tune the transmition map for a better result
     epsalon = 10**(-8)
-    [row, col, dem] = image.shape
-    abs_wk = 9
-    num_pixels = row*col
-    L = scipy.sparse.csr_matrix((num_pixels,num_pixels),dtype= 'float')
-    #padding wiht the image 
-    L = cv2.copyMakeBorder(L[:,:], 1, 1, 1, 1, cv2.BORDER_REFLECT)
-    for i in range(1,row-1):
-        for j in range(1,col-1):
-            w = image[i-1:i+1,j-1:j+1,:]
-            w_col = w.reshape(abs_wk,dem)
-            w_mean = np.mean(w).T
-            w_conv = np.cov(w,1)
-            w_inv_conv_idetity = w_conv + (epsalon/abs_wk) * scipy.sparce.speye(3,3)
-            
-            L[i,j] = 1
-    print('test')
+    h,w = image.shape[:2]
+    window_area = (2*r + 1)**2
+    n_vals = (w - 2*r)*(h - 2*r)*window_area**2
+    k = 0
+    # data for matting laplacian in coordinate form
+    i = np.empty(n_vals, dtype=np.int32)
+    j = np.empty(n_vals, dtype=np.int32)
+    v = np.empty(n_vals, dtype=np.float64)
+
+    # for each pixel of image
+    for y in range(r, h - r):
+        for x in range(r, w - r):
+
+            # gather neighbors of current pixel in 3x3 window
+            n = image[y-r:y+r+1, x-r:x+r+1]
+            u = np.zeros(3)
+            for p in range(3):
+                u[p] = n[:, :, p].mean()
+            c = n - u
+
+            # calculate covariance matrix over color channels
+            cov = np.zeros((3, 3))
+            for p in range(3):
+                for q in range(3):
+                    cov[p, q] = np.mean(c[:, :, p]*c[:, :, q])
+
+            # calculate inverse covariance of window
+            inv_cov = np.linalg.inv(cov + epsilon/window_area * np.eye(3))
+
+            # for each pair ((xi, yi), (xj, yj)) in a 3x3 window
+            for dyi in range(2*r + 1):
+                for dxi in range(2*r + 1):
+                    for dyj in range(2*r + 1):
+                        for dxj in range(2*r + 1):
+                            i[k] = (x + dxi - r) + (y + dyi - r)*w
+                            j[k] = (x + dxj - r) + (y + dyj - r)*w
+                            temp = c[dyi, dxi].dot(inv_cov).dot(c[dyj, dxj])
+                            v[k] = (1.0 if (i[k] == j[k]) else 0.0) - (1 + temp)/window_area
+                            k += 1
+    h,w = Transmission_map.shape
+    L = scipy.sparse.csr_matrix((v, (i, j)), shape=(w*h, w*h))
+    return L
+
 def soft_matting(L,image,t_map):
     image_copy = image.copy()
     lamda = 10**(-4)
@@ -93,46 +122,94 @@ def soft_matting(L,image,t_map):
     t_map_mat = t_map*(L+lamda*U)/lamda
     return t_map_mat
 
+def guided_filter(image,guide,diameter,epsilon):
+    w_size = diameter+1
+    # Exatrcation the mean of the image by blurring
+    meanI=cv2.blur(image,(w_size,w_size))
+    mean_Guide=cv2.blur(guide,(w_size,w_size))
+    # Extracting the auto correlation
+    II=image**2
+    corrI=cv2.blur(II,(w_size,w_size))
+    # Finding the correlation between image and guide
+    I_guide=image*guide
+    corrIG=cv2.blur(I_guide,(w_size,w_size))
+    # using the mean of the image to find the variance of each point
+    varI=corrI-meanI**2
+    covIG=corrIG-meanI*mean_Guide
+    #covIG normalized with a epsilon factor
+    a=covIG/(varI+epsilon)
+    #a is used to find the b 
+    b=mean_Guide-a*meanI 
+    meanA=cv2.blur(a,(w_size,w_size))
+    meanB=cv2.blur(b,(w_size,w_size))
+    transmission_rate=meanA*image+meanB
+    # normalizaing of the transimational map
+    transmission_rate = transmission_rate/np.max(transmission_rate)
+    return transmission_rate
+
+
+
+#---------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------
+
 # inputing the information
 base_path  =  os.getcwd()
 test_Haze = os.listdir(base_path+ '/data_set/Training_Set/hazy')
 test_GT = os.listdir(base_path+ '/data_set/Training_Set/GT')
-image = cv2.imread( base_path + "/data_set/Test_Set/Golden_gate.jpg",cv2.IMREAD_COLOR)
+image = cv2.imread( base_path + "/data_set/Test_Set/Bridge.jpg",cv2.IMREAD_COLOR)
 # extracting the minmum value from 15 by 15 patch
 min_image = min_filter(image)
 
 # perfroming the minmin with 15by15 min filter
 dark_prior = rgb_min_image(min_image)
 # displaying the results
-plt.fig, (ax1,ax2,ax3) = plt.subplots(1,3)
-ax1.imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
-ax1.set_title('original image')
-ax2.imshow(cv2.cvtColor(min_image,cv2.COLOR_BGR2RGB))
-ax2.set_title('The min 15 patch image',)
-ax3.imshow(dark_prior,cmap='gray')
-ax3.set_title('The dark prior')
+fig, axes= plt.subplots(nrows=1, ncols=3,figsize=(20,5))
+plt.suptitle('Stages of Dark channel')
+axes[0].imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
+axes[0].set_title('original image')
+axes[1].imshow(cv2.cvtColor(min_image,cv2.COLOR_BGR2RGB))
+axes[1].set_title('The min 15 patch image',)
+axes[2].imshow(dark_prior,cmap='gray')
+axes[2].set_title('The dark prior')
 interactive(True)
 plt.show()
 
 A = A_estimator(image,dark_prior)
-plt.fig, (ax1,ax2,ax3) = plt.subplots(1,3)
-ax1.imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
-ax1.set_title('original image')
-ax2.imshow(A,cmap='gray')
-ax2.set_title('The Ambiance image')
-Transmit_image = transmition_map(image,A,0.95)
-ax3.imshow(Transmit_image,cmap='gray')
-ax3.set_title('The transmitance image')
+fig, axes= plt.subplots(nrows=1, ncols=3,figsize=(20,5))
+axes[0].imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
+axes[0].set_title('original image')
+axes[1].imshow(A,cmap='gray')
+axes[1].set_title('The Ambiance image')
+Transmition_image = transmition_map(image,A,0.95)
+axes[2].imshow(Transmition_image,cmap='gray')
+axes[2].set_title('The transmitance image')
 
 plt.show()
 
-plt.fig, (ax1,ax2,ax3) = plt.subplots(1,3)
-radience_image = Radience_cal(image,A,Transmit_image,0.1)
-ax1.imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
-ax1.set_title('original image')
-ax2.imshow(Transmit_image,cmap='gray')
-ax2.set_title('The transmitance image')
-ax3.imshow(cv2.cvtColor(radience_image,cv2.COLOR_BGR2RGB))
-ax3.set_title('Haze Free image')
+fig, axes= plt.subplots(nrows=1, ncols=3,figsize=(20,5))
+radience_image = Radience_cal(image,A,Transmition_image,0.1)
+axes[0].imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
+axes[0].set_title('original image')
+axes[1].imshow(Transmition_image,cmap='gray')
+axes[1].set_title('The transmitance image')
+axes[2].imshow(cv2.cvtColor(radience_image,cv2.COLOR_BGR2RGB))
+axes[2].set_title('Haze Free image')
+
+plt.show()
+
+epsilon = 10**-8
+img_gray=cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+# refined the transmition map using the guide filter
+refine_Transmission_image=guided_filter(img_gray.astype(np.float32),Transmition_image.astype(np.float32),100,epsilon)
+refine_radience_image = Radience_cal(image,A,refine_Transmission_image,0.1)
+# diplaying the refined results
+fig, axes= plt.subplots(nrows=1, ncols=3,figsize=(20,5))
+radience_image = Radience_cal(image,A,Transmition_image,0.1)
+axes[0].imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
+axes[0].set_title('original image')
+axes[1].imshow(refine_Transmission_image,cmap='gray')
+axes[1].set_title('The Refine Transmitance image')
+axes[2].imshow(cv2.cvtColor(refine_radience_image,cv2.COLOR_BGR2RGB))
+axes[2].set_title('Haze Free image')
 interactive(False)
 plt.show()
