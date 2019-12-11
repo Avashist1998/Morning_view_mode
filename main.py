@@ -21,7 +21,7 @@ def min_filter(image):
         [row,col] = temp_image.shape
         # padding the iamge 
         temp_image = cv2.copyMakeBorder(temp_image, 14, 14, 14, 14, cv2.BORDER_REFLECT) 
-        # perfroming the min filter 
+        # perfroming the min filter with 15 x 15 window
         for i in range(row):
             for j in range(col):
                 i_image[i,j,k] = (temp_image[i:15+i,j:15+j]).min()
@@ -30,16 +30,20 @@ def min_filter(image):
 def dark_channel(image):
     # output the dark channel as the image
     new_image = image.copy()
+    # perfroming the 15 x 15 min filter 
     min_image = min_filter(new_image)
+    # perfroming the color min operation
     dark_prior = rgb_min_image(min_image)
     return dark_prior
 
-def transmition_map(image,A,w):
-    #finds the transmition map for the image
+def transmission_map(image,A,w):
+    #finds the transmission map for the image
     image_new =  np.divide(image,A).astype(float)
+    # finding the dark channel of the divide image 
     new_dark = dark_channel(image_new)
-    transmition = 1 - w*new_dark
-    return transmition
+    # Saling and subtracting the image 
+    transmission  = 1 - w*new_dark
+    return transmission 
 
 def A_estimator(image,dark_prior):
     #Used the information extracted from the dark prior 
@@ -47,14 +51,18 @@ def A_estimator(image,dark_prior):
     image_copy = image.copy()
     [row,col,dem] = image_copy.shape
     dark_copy = dark_prior.copy()
+    # finding the number of 0.01% values
     num = np.round(row*col*0.001).astype(int)
     j = sorted(np.asarray(dark_copy).reshape(-1), reverse=True)[:num]
+    # getting the location of the top 0.01%
     ind = np.unravel_index(j[0], dark_copy.shape)
+    # Pefroming a search for the max value in the group
     max_val = image_copy[ind[0],ind[1],:]
     for element in j:
         ind = np.unravel_index(element, dark_copy.shape)
         if (sum(max_val[:]) < sum(image_copy[ind[0],ind[1],:])):
             max_val[:] = image_copy[ind[0],ind[1],:]
+    # creating a color image of the max value
     A = image_copy
     A[:,:,:] = max_val[:]
     return A
@@ -62,13 +70,16 @@ def A_estimator(image,dark_prior):
 def Radience_cal(image,A,Transmission_map,t_not):
     #Used information from the transmit map to remove haze from the image. 
     image_copy = image.copy()
-    A_copy = A.copy()
     Transmission_map_copy = (Transmission_map.copy()).astype(float)
+    # Pefroming the min operation between Ttransmission map and 0.1
     divisor = np.maximum(Transmission_map_copy,t_not)
     radience = (image.copy()).astype(float)
+    # Perfroming the eqution 3 for every color channel
     for i in range(3):
         radience[:,:,i] = np.divide(((image_copy[:,:,i]).astype(float) - A[0,0,i]),divisor) + A[0,0,i]
-    #radience = 255*(radience/np.max(radience))
+    # Capping all of the out of bound values 
+    #radience = radience - np.min(radience)
+    #radience = 255*(radience/np.max(radience))    
     radience[radience>255]=255
     radience[radience<0]=0
     return radience.astype('uint8')
@@ -146,6 +157,7 @@ def guided_filter(image,guide,diameter,epsilon):
     b=mean_Guide-a*meanI 
     meanA=cv2.blur(a,(w_size,w_size))
     meanB=cv2.blur(b,(w_size,w_size))
+    # using the mean of a b to fix refine the transmission map
     transmission_rate=meanA*image+meanB
     # normalizaing of the transimational map
     transmission_rate = transmission_rate/np.max(transmission_rate)
@@ -164,15 +176,23 @@ image = cv2.imread( base_path + "/data_set/Test_Set/Bridge.jpg",cv2.IMREAD_COLOR
 # extracting the minmum value from 15 by 15 patch
 min_image = min_filter(image)
 
-# perfroming the minmin with 15by15 min filter
+# perfroming the minmin with 15 by 15 min filter
 dark_prior = rgb_min_image(min_image)
 # displaying the results
-fig, axes= plt.subplots(nrows=1, ncols=3,figsize=(20,5))
-plt.suptitle('Stages of Dark channel')
+A = A_estimator(image,dark_prior)
+epsilon = 10**-8
+img_gray=cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+Transmition_image = transmission_map(image,A,0.95)
+refine_Transmission_image=guided_filter(img_gray.astype(np.float32),Transmition_image.astype(np.float32),100,epsilon)
+refine_radience_image = Radience_cal(image,A,refine_Transmission_image,0.1)
+
+fig, axes= plt.subplots(nrows=1, ncols=3,figsize=(18,8))
+plt.suptitle('Dark Channel Prior Stage')
 axes[0].imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
-axes[0].set_title('original image')
+axes[0].set_title('Original image')
 axes[1].imshow(cv2.cvtColor(min_image,cv2.COLOR_BGR2RGB))
 axes[1].set_title('The min 15 patch image',)
+
 axes[2].imshow(dark_prior,cmap='gray')
 axes[2].set_title('The dark prior')
 interactive(True)
@@ -184,7 +204,7 @@ axes[0].imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
 axes[0].set_title('original image')
 axes[1].imshow(A,cmap='gray')
 axes[1].set_title('The Ambiance image')
-Transmition_image = transmition_map(image,A,0.95)
+Transmition_image = transmission_map(image,A,0.95)
 axes[2].imshow(Transmition_image,cmap='gray')
 axes[2].set_title('The Transmission  map')
 
@@ -221,3 +241,4 @@ axes[1].set_title('Refined Haze Free image')
 
 interactive(False)
 plt.show()
+'''
