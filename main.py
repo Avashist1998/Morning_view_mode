@@ -14,13 +14,17 @@ def rgb_min_image(image):
 def min_filter(image):
     # perfroms the min filter on 15 by 15 area
     for k in range (3):
+        # creating a copy of the filter 
         i_image = image.copy()
+        # extracting one channel of the image 
         temp_image = image[:,:,k].copy()
         [row,col] = temp_image.shape
+        # padding the iamge 
         temp_image = cv2.copyMakeBorder(temp_image, 14, 14, 14, 14, cv2.BORDER_REFLECT) 
+        # perfroming the min filter 
         for i in range(row):
             for j in range(col):
-                i_image[i,j,k] = (temp_image[i:14+i,j:14+j]).min()
+                i_image[i,j,k] = (temp_image[i:15+i,j:15+j]).min()
     return i_image
 
 def dark_channel(image):
@@ -163,36 +167,37 @@ min_image = min_filter(image)
 # perfroming the minmin with 15by15 min filter
 dark_prior = rgb_min_image(min_image)
 # displaying the results
-plt.fig, (ax1,ax2,ax3) = plt.subplots(1,3)
-ax1.imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
-ax1.set_title('original image')
-ax2.imshow(cv2.cvtColor(min_image,cv2.COLOR_BGR2RGB))
-ax2.set_title('The min 15 patch image',)
-ax3.imshow(dark_prior,cmap='gray')
-ax3.set_title('The dark prior')
+fig, axes= plt.subplots(nrows=1, ncols=3,figsize=(20,5))
+plt.suptitle('Stages of Dark channel')
+axes[0].imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
+axes[0].set_title('original image')
+axes[1].imshow(cv2.cvtColor(min_image,cv2.COLOR_BGR2RGB))
+axes[1].set_title('The min 15 patch image',)
+axes[2].imshow(dark_prior,cmap='gray')
+axes[2].set_title('The dark prior')
 interactive(True)
 plt.show()
 
 A = A_estimator(image,dark_prior)
-plt.fig, (ax1,ax2,ax3) = plt.subplots(1,3)
-ax1.imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
-ax1.set_title('original image')
-ax2.imshow(A,cmap='gray')
-ax2.set_title('The Ambiance image')
+fig, axes= plt.subplots(nrows=3, ncols=1,figsize=(20,5))
+axes[0].imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
+axes[0].set_title('original image')
+axes[1].imshow(A,cmap='gray')
+axes[1].set_title('The Ambiance image')
 Transmition_image = transmition_map(image,A,0.95)
-ax3.imshow(Transmition_image,cmap='gray')
-ax3.set_title('The transmitance image')
+axes[2].imshow(Transmition_image,cmap='gray')
+axes[2].set_title('The Transmission  map')
 
 plt.show()
 
-plt.fig, (ax1,ax2,ax3) = plt.subplots(1,3)
+fig, axes= plt.subplots(nrows=1, ncols=3,figsize=(20,5))
 radience_image = Radience_cal(image,A,Transmition_image,0.1)
-ax1.imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
-ax1.set_title('original image')
-ax2.imshow(Transmition_image,cmap='gray')
-ax2.set_title('The transmitance image')
-ax3.imshow(cv2.cvtColor(radience_image,cv2.COLOR_BGR2RGB))
-ax3.set_title('Haze Free image')
+axes[0].imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
+axes[0].set_title('original image')
+axes[1].imshow(Transmition_image,cmap='gray')
+axes[1].set_title('The Transmission  map')
+axes[2].imshow(cv2.cvtColor(radience_image,cv2.COLOR_BGR2RGB))
+axes[2].set_title('Haze Free image')
 
 plt.show()
 
@@ -202,12 +207,17 @@ img_gray=cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
 refine_Transmission_image=guided_filter(img_gray.astype(np.float32),Transmition_image.astype(np.float32),100,epsilon)
 refine_radience_image = Radience_cal(image,A,refine_Transmission_image,0.1)
 # diplaying the refined results
-plt.fig, (ax1,ax2,ax3) = plt.subplots(1,3)
-ax1.imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
-ax1.set_title('Original image')
-ax2.imshow(refine_Transmission_image,cmap='gray')
-ax2.set_title('The Refine Transmitance image')
-ax3.imshow(cv2.cvtColor(refine_radience_image,cv2.COLOR_BGR2RGB))
-ax3.set_title('Haze Free image')
+fig, axes= plt.subplots(nrows=2, ncols=1,figsize=(5,20))
+radience_image = Radience_cal(image,A,Transmition_image,0.1)
+axes[0].imshow(cv2.cvtColor(image,cv2.COLOR_BGR2RGB))
+axes[0].set_title('original image')
+axes[1].imshow(refine_Transmission_image,cmap='gray')
+axes[1].set_title('The Refine Transmitance image')
+axes[0].imshow(cv2.cvtColor(radience_image,cv2.COLOR_BGR2RGB))
+axes[0].set_title('Original Haze free image')
+
+axes[1].imshow(cv2.cvtColor(refine_radience_image,cv2.COLOR_BGR2RGB))
+axes[1].set_title('Refined Haze Free image')
+
 interactive(False)
 plt.show()
