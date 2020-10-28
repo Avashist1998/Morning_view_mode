@@ -13,7 +13,7 @@ pip install -r requirements.txt
 
 ## Results
 
-![Image](https://imgur.com/a/dcQ9fK8)
+![Image](./Results.png)
 ### Resources
 
 [Dark Prior Paper](http://kaiminghe.com/publications/cvpr09.pdf)
