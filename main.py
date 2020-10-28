@@ -16,7 +16,7 @@ def read_image(path=None):
     if base_path in path:
         full_path = path
     
-    if !(os.path.exists(full_path)):
+    if not(os.path.exists(full_path)):
         print('The path \" {}\"does not exist. Make just that the file exist').fromat(full_path)
         return None
     else:
@@ -200,7 +200,7 @@ def Haze_Remover(path=None, image=None,epsilon=10**-8):
             refine_Transmission_image = guided_filter(img_gray.astype(np.float32),Transmition_image.astype(np.float32),100,epsilon)
             refine_radience_image = Radience_cal(image,A,refine_Transmission_image,0.1)
             output = {'Input':image, 'Min_Image':min_image, 'A':A_estimator,'Gray_Image':img_gray,
-                        'Transmition_Map':Transmition_image, 'Refine_Transmition_Map':refine_Transmission_image
+                        'Transmition_Map':Transmition_image, 'Refine_Transmition_Map':refine_Transmission_image,
                         'DeHaze_Image':refine_radience_image}
 
     
@@ -278,4 +278,3 @@ axes[1].set_title('Refined Haze Free image')
 
 interactive(False)
 plt.show()
-'''

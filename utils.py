@@ -12,7 +12,7 @@ def read_image(path=None):
     if base_path in path:
         full_path = path
     
-    if !(path.exists(full_path)):
+    if not(path.exists(full_path)):
         print('The path \" {}\"does not exist. Make just that the file exist').fromat(full_path)
         return None
     else:

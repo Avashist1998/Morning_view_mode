@@ -22,7 +22,7 @@ class DarkPrior():
         new_dark = self.dark_channel(image_new)
         # Saling and subtracting the image 
         transmission  = 1 - w*new_dark
-        return transmission 
+        return transmission
 
     def A_estimator(self, image,dark_prior):
         #Used the information extracted from the dark prior 
@@ -90,15 +90,15 @@ class DarkPrior():
         return transmission_rate
 
     def Haze_Remover(path=None, image=None):
-    '''
-    This function is used to dehaze a image from an image path or from a cv2 image oject
-    '''
-    if path is None and image is None:
-        print("There is not path and image enter to the function. Please add a image or a path to the model")
-        return None
-    else:
-        if image is none:
-            image = read_image(path)
+        '''
+            This function is used to dehaze a image from an image path or from a cv2 image object
+        '''
+        if path is None and image is None:
+            print("There is not path and image enter to the function. Please add a image or a path to the model")
+            return None
+        else:
+            if image is none:
+                image = read_image(path)
             min_image = min_filter(image)
             dark_prior = rgb_min_image(min_image)
             A = A_estimator(image,dark_prior)
@@ -107,7 +107,7 @@ class DarkPrior():
             refine_Transmission_image = self.guided_filter(img_gray.astype(np.float32),Transmition_image.astype(np.float32),100,self.epsilon)
             refine_radience_image = self.Radience_cal(image,A,refine_Transmission_image,0.1)
             self.output = {'Input':image, 'Min_Image':min_image, 'A':A_estimator,'Gray_Image':img_gray,
-                        'Transmition_Map':Transmition_image, 'Refine_Transmition_Map':refine_Transmission_image
+                        'Transmition_Map':Transmition_image, 'Refine_Transmition_Map':refine_Transmission_image,
                         'DeHaze_Image':refine_radience_image}
             return output
 
