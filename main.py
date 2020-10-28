@@ -5,6 +5,24 @@ import numpy as np
 from matplotlib import interactive
 import scipy
 
+
+def read_image(path=None):
+    '''
+        Read an image from a path
+        Path is relative path or full path
+    '''
+    base_path = os.getcwd()
+    full_path = os.path.join(base_path,path)
+    if base_path in path:
+        full_path = path
+    
+    if !(os.path.exists(full_path)):
+        print('The path \" {}\"does not exist. Make just that the file exist').fromat(full_path)
+        return None
+    else:
+        image = cv2.imread(full_path,cv2.IMREAD_COLOR)
+        return image
+
 def rgb_min_image(image):
     # extractes the min of the rgb values and outputs
     # a gray scale image
@@ -164,7 +182,28 @@ def guided_filter(image,guide,diameter,epsilon):
     return transmission_rate
 
 
+def Haze_Remover(path=None, image=None,epsilon=10**-8):
+    '''
+    This function is used to dehaze a image from an image path or from a cv2 image oject
+    '''
+    if path is None and image is None:
+        print("There is not path and image enter to the function. Please add a image or a path to the model")
+        return None
+    else:
+        if image is none:
+            image = read_image(path)
+            min_image = min_filter(image)
+            dark_prior = rgb_min_image(min_image)
+            A = A_estimator(image,dark_prior)
+            img_gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+            Transmition_image = transmission_map(image,A,0.95)
+            refine_Transmission_image = guided_filter(img_gray.astype(np.float32),Transmition_image.astype(np.float32),100,epsilon)
+            refine_radience_image = Radience_cal(image,A,refine_Transmission_image,0.1)
+            output = {'Input':image, 'Min_Image':min_image, 'A':A_estimator,'Gray_Image':img_gray,
+                        'Transmition_Map':Transmition_image, 'Refine_Transmition_Map':refine_Transmission_image
+                        'DeHaze_Image':refine_radience_image}
 
+    
 #---------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------
 
