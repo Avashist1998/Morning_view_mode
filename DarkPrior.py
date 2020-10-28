@@ -6,7 +6,6 @@ class DarkPrior():
     def __init__(self, epsilon=10**-8):
         self.epsilon = epsilon
 
-
     def dark_channel(self, image):
         # output the dark channel as the image
         new_image = image.copy()
@@ -113,4 +112,12 @@ class DarkPrior():
             return output
 
     def Save_image(self, path='output.jpg', key='DeHaze_Image'):
-        
+        '''
+        Input is path/filename 
+        Key is the file you want to save
+        key = [Input, Min_Image, A, Gray_Image, Transmition_Map, Refine_Transmition_Map, DeHaze_Image]
+        saves the image to the path
+        '''
+        cv2.imwrite(path,output[key])
+        print('file name {} has been saved').format(path)
+
